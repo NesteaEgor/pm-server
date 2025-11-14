@@ -15,7 +15,8 @@ import java.util.UUID;
 public class UserEntity {
 
     @Id
-    @GeneratedValue
+    //@GeneratedValue было но сменил тк генерируется по умолчанию (uuid_generate_v4()), но Hibernate иногда пытается вставить id=null и может ругаться.
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, unique = true)
