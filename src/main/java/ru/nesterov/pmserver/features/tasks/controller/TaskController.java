@@ -1,0 +1,32 @@
+package ru.nesterov.pmserver.features.tasks.controller;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import ru.nesterov.pmserver.features.tasks.dto.CreateTaskRequest;
+import ru.nesterov.pmserver.features.tasks.dto.TaskDto;
+import ru.nesterov.pmserver.features.tasks.service.TaskService;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/projects/{projectId}/tasks")
+public class TaskController {
+
+    private final TaskService taskService;
+
+    @PostMapping
+    public TaskDto create(Authentication auth, @PathVariable UUID projectId, @Valid @RequestBody CreateTaskRequest req) {
+        UUID userId = (UUID) auth.getPrincipal();
+        return taskService.create(userId, projectId, req);
+    }
+
+    @GetMapping
+    public List<TaskDto> list(Authentication auth, @PathVariable UUID projectId) {
+        UUID userId = (UUID) auth.getPrincipal();
+        return taskService.list(userId, projectId);
+    }
+}
