@@ -49,4 +49,26 @@ public class TaskService {
     public static TaskDto toDto(TaskEntity t) {
         return new TaskDto(t.getId(), t.getProjectId(), t.getTitle(), t.getDescription(), t.getStatus(), t.getCreatedAt());
     }
+
+    public TaskDto update(UUID ownerId, UUID projectId, UUID taskId, ru.nesterov.pmserver.features.tasks.dto.UpdateTaskRequest req) {
+        projectRepository.findByIdAndOwnerId(projectId, ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        TaskEntity task = taskRepository.findByIdAndProjectId(taskId, projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Task not found"));
+
+        if (req.getTitle() != null) task.setTitle(req.getTitle().trim());
+        if (req.getDescription() != null) task.setDescription(req.getDescription().trim());
+
+        if (req.getStatus() != null) {
+            String s = req.getStatus().trim().toUpperCase();
+            if (!s.equals("TODO") && !s.equals("IN_PROGRESS") && !s.equals("DONE")) {
+                throw new IllegalArgumentException("Invalid status");
+            }
+            task.setStatus(s);
+        }
+
+        task = taskRepository.save(task);
+        return toDto(task);
+    }
 }
