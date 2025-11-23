@@ -36,15 +36,46 @@ public class TaskService {
         return toDto(task);
     }
 
-    public List<TaskDto> list(UUID ownerId, UUID projectId) {
+    public List<TaskDto> list(UUID ownerId, UUID projectId, String status, String sort) {
         projectRepository.findByIdAndOwnerId(projectId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
 
-        return taskRepository.findByProjectIdOrderByCreatedAtDesc(projectId)
-                .stream()
-                .map(TaskService::toDto)
-                .toList();
+        String normalizedStatus = null;
+        if (status != null && !status.isBlank()) {
+            normalizedStatus = status.trim().toUpperCase();
+            if (!normalizedStatus.equals("TODO") && !normalizedStatus.equals("IN_PROGRESS") && !normalizedStatus.equals("DONE")) {
+                throw new IllegalArgumentException("Invalid status");
+            }
+        }
+
+        String normalizedSort = (sort == null || sort.isBlank())
+                ? "createdat"
+                : sort.trim().toLowerCase();
+
+        if (!normalizedSort.equals("createdat") && !normalizedSort.equals("deadline")) {
+            throw new IllegalArgumentException("Invalid sort");
+        }
+
+
+        List<TaskEntity> tasks;
+
+        if (normalizedSort.equals("deadline")) {
+            if (normalizedStatus == null) {
+                tasks = taskRepository.findByProjectIdOrderByDeadlineAscNullsLast(projectId);
+            } else {
+                tasks = taskRepository.findByProjectIdAndStatusOrderByDeadlineAscNullsLast(projectId, normalizedStatus);
+            }
+        } else {
+            if (normalizedStatus == null) {
+                tasks = taskRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
+            } else {
+                tasks = taskRepository.findByProjectIdAndStatusOrderByCreatedAtDesc(projectId, normalizedStatus);
+            }
+        }
+
+        return tasks.stream().map(TaskService::toDto).toList();
     }
+
 
     public static TaskDto toDto(TaskEntity t) {
         return new TaskDto(t.getId(), t.getProjectId(), t.getTitle(), t.getDescription(), t.getStatus(), t.getCreatedAt(), t.getDeadline());

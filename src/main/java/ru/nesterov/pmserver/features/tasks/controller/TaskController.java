@@ -26,9 +26,12 @@ public class TaskController {
     }
 
     @GetMapping
-    public List<TaskDto> list(Authentication auth, @PathVariable UUID projectId) {
+    public List<TaskDto> list(Authentication auth,
+                              @PathVariable UUID projectId,
+                              @RequestParam(required = false) String status,
+                              @RequestParam(required = false) String sort) {
         UUID userId = (UUID) auth.getPrincipal();
-        return taskService.list(userId, projectId);
+        return taskService.list(userId, projectId, status, sort);
     }
 
     @PatchMapping("/{taskId}")
