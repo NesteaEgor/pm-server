@@ -3,6 +3,8 @@ package ru.nesterov.pmserver.features.tasks.dto;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.time.Instant;
+
 @Data
 public class UpdateTaskRequest {
 
@@ -15,4 +17,7 @@ public class UpdateTaskRequest {
 
     // TODO / IN_PROGRESS / DONE
     private String status;
+
+    private Instant deadline;
+
 }

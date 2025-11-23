@@ -13,4 +13,5 @@ public class TaskDto {
     String description;
     String status;
     Instant createdAt;
+    Instant deadline;
 }

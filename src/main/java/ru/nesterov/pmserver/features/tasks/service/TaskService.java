@@ -47,7 +47,7 @@ public class TaskService {
     }
 
     public static TaskDto toDto(TaskEntity t) {
-        return new TaskDto(t.getId(), t.getProjectId(), t.getTitle(), t.getDescription(), t.getStatus(), t.getCreatedAt());
+        return new TaskDto(t.getId(), t.getProjectId(), t.getTitle(), t.getDescription(), t.getStatus(), t.getCreatedAt(), t.getDeadline());
     }
 
     public TaskDto update(UUID ownerId, UUID projectId, UUID taskId, ru.nesterov.pmserver.features.tasks.dto.UpdateTaskRequest req) {
@@ -66,6 +66,10 @@ public class TaskService {
                 throw new IllegalArgumentException("Invalid status");
             }
             task.setStatus(s);
+        }
+
+        if (req.getDeadline() != null) {
+            task.setDeadline(req.getDeadline());
         }
 
         task = taskRepository.save(task);

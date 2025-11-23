@@ -32,4 +32,7 @@ public class TaskEntity {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column
+    private Instant deadline;
 }
