@@ -1,23 +1,65 @@
 package ru.nesterov.pmserver.common;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException ex,
+            HttpServletRequest req
+    ) {
         String msg = ex.getMessage() == null ? "Bad request" : ex.getMessage();
+        String low = msg.toLowerCase();
 
-        HttpStatus status;
-        if (msg.toLowerCase().contains("exists")) status = HttpStatus.CONFLICT;      // 409
-        else if (msg.toLowerCase().contains("invalid credentials")) status = HttpStatus.UNAUTHORIZED; // 401
-        else status = HttpStatus.BAD_REQUEST; // 400
+        HttpStatus status = HttpStatus.BAD_REQUEST; // 400 по умолчанию
+        if (low.contains("not found")) status = HttpStatus.NOT_FOUND;                 // 404
+        else if (low.contains("already exists") || low.contains("exists")) status = HttpStatus.CONFLICT; // 409
+        else if (low.contains("invalid credentials")) status = HttpStatus.UNAUTHORIZED; // 401
 
-        return ResponseEntity.status(status).body(Map.of("error", msg));
+        return ResponseEntity.status(status).body(buildError(status, msg, req.getRequestURI()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest req
+    ) {
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+
+        HttpStatus status = HttpStatus.BAD_REQUEST; // 400
+        return ResponseEntity.status(status).body(buildError(status, msg, req.getRequestURI()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleOther(
+            Exception ex,
+            HttpServletRequest req
+    ) {
+        // Не светим stacktrace клиенту (в курсовом и в реальном проде так делают)
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR; // 500
+        return ResponseEntity.status(status).body(buildError(status, "Internal server error", req.getRequestURI()));
+    }
+
+    private Map<String, Object> buildError(HttpStatus status, String message, String path) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        body.put("path", path);
+        return body;
     }
 }
