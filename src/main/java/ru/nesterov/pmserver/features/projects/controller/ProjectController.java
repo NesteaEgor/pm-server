@@ -35,4 +35,11 @@ public class ProjectController {
         UUID userId = (UUID) auth.getPrincipal();
         return projectService.get(userId, id);
     }
+
+    @DeleteMapping("/{id}")
+    public void delete(Authentication auth, @PathVariable UUID id) {
+        UUID userId = (UUID) auth.getPrincipal();
+        projectService.delete(userId, id);
+    }
+
 }

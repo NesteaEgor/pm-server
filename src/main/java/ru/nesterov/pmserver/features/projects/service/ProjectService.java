@@ -2,6 +2,7 @@ package ru.nesterov.pmserver.features.projects.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.nesterov.pmserver.features.projects.dto.CreateProjectRequest;
 import ru.nesterov.pmserver.features.projects.dto.ProjectDto;
 import ru.nesterov.pmserver.features.projects.entity.ProjectEntity;
@@ -45,4 +46,12 @@ public class ProjectService {
     public static ProjectDto toDto(ProjectEntity p) {
         return new ProjectDto(p.getId(), p.getName(), p.getDescription(), p.getCreatedAt());
     }
+
+    @Transactional
+    public void delete(UUID ownerId, UUID projectId) {
+        var p = projectRepository.findByIdAndOwnerId(projectId, ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        projectRepository.delete(p);
+    }
+
 }

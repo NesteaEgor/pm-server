@@ -2,6 +2,7 @@ package ru.nesterov.pmserver.features.tasks.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.nesterov.pmserver.features.projects.repository.ProjectRepository;
 import ru.nesterov.pmserver.features.tasks.dto.CreateTaskRequest;
 import ru.nesterov.pmserver.features.tasks.dto.TaskDto;
@@ -106,4 +107,17 @@ public class TaskService {
         task = taskRepository.save(task);
         return toDto(task);
     }
+
+    @Transactional
+    public void delete(UUID ownerId, UUID projectId, UUID taskId) {
+        projectRepository.findByIdAndOwnerId(projectId, ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        long deleted = taskRepository.deleteByIdAndProjectId(taskId, projectId);
+        if (deleted == 0) {
+            throw new IllegalArgumentException("Task not found");
+        }
+    }
+
+
 }

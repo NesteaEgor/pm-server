@@ -42,4 +42,13 @@ public class TaskController {
         UUID userId = (UUID) auth.getPrincipal();
         return taskService.update(userId, projectId, taskId, req);
     }
+
+    @DeleteMapping("/{taskId}")
+    public void delete(Authentication auth,
+                       @PathVariable UUID projectId,
+                       @PathVariable UUID taskId) {
+        UUID userId = (UUID) auth.getPrincipal();
+        taskService.delete(userId, projectId, taskId);
+    }
+
 }

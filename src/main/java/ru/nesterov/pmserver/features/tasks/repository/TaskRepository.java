@@ -1,8 +1,10 @@
 package ru.nesterov.pmserver.features.tasks.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import ru.nesterov.pmserver.features.tasks.entity.TaskEntity;
 
 import java.util.List;
@@ -13,6 +15,10 @@ public interface TaskRepository extends JpaRepository<TaskEntity, UUID> {
     List<TaskEntity> findByProjectIdOrderByCreatedAtDesc(UUID projectId);
 
     Optional<TaskEntity> findByIdAndProjectId(UUID id, UUID projectId);
+
+    @Modifying
+    @Transactional
+    long deleteByIdAndProjectId(UUID id, UUID projectId);
 
     List<TaskEntity> findByProjectIdAndStatusOrderByCreatedAtDesc(UUID projectId, String status);
 
