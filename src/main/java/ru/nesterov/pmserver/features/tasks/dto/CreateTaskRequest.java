@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.time.Instant;
+
 @Data
 public class CreateTaskRequest {
 
@@ -13,4 +15,6 @@ public class CreateTaskRequest {
 
     @Size(max = 5000)
     private String description;
+
+    private Instant deadline;
 }

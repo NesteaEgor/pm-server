@@ -31,6 +31,7 @@ public class TaskService {
                 .description(req.getDescription() == null ? null : req.getDescription().trim())
                 .status("TODO")
                 .createdAt(Instant.now())
+                .deadline(req.getDeadline())
                 .build();
 
         task = taskRepository.save(task);
