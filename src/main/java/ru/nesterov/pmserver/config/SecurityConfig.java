@@ -29,15 +29,16 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // ВАЖНО: нормальные статусы вместо "рандомных" 403
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) -> res.sendError(401))
                         .accessDeniedHandler((req, res, e) -> res.sendError(403))
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // preflight для CORS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // allow ws handshake
+                        .requestMatchers("/ws/**").permitAll()
 
                         .requestMatchers("/api/auth/**", "/error").permitAll()
                         .anyRequest().authenticated()
