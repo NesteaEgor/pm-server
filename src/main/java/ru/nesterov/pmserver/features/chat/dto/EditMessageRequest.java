@@ -5,12 +5,9 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-public class SendMessageRequest {
+public class EditMessageRequest {
 
     @NotBlank
     @Size(max = 5000)
     private String text;
-
-    @NotBlank
-    private String clientMessageId;
 }

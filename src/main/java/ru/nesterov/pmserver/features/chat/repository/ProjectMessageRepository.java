@@ -6,6 +6,7 @@ import ru.nesterov.pmserver.features.chat.entity.ProjectMessageEntity;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProjectMessageRepository extends JpaRepository<ProjectMessageEntity, UUID> {
@@ -17,4 +18,12 @@ public interface ProjectMessageRepository extends JpaRepository<ProjectMessageEn
             Instant before,
             Pageable pageable
     );
+
+    Optional<ProjectMessageEntity> findByProjectIdAndAuthorIdAndClientMessageId(
+            UUID projectId,
+            UUID authorId,
+            String clientMessageId
+    );
+
+    Optional<ProjectMessageEntity> findByIdAndProjectId(UUID id, UUID projectId);
 }

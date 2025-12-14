@@ -29,4 +29,13 @@ public class ProjectMessageEntity {
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "client_message_id", length = 64)
+    private String clientMessageId;
+
+    @Column(name = "edited_at")
+    private Instant editedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

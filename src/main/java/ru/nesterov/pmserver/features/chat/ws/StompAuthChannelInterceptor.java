@@ -30,10 +30,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        // Авторизуемся на CONNECT
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             authenticate(accessor);
-            // ВАЖНО: вернуть НОВОЕ сообщение с обновлёнными headers
             return MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
         }
 
@@ -56,6 +54,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         userRepository.findById(userId).orElseThrow(() -> new MessagingException("User not found"));
 
+        // principal = UUID (auth.getName() будет userId.toString())
         var authentication = new UsernamePasswordAuthenticationToken(userId, null, List.of());
         accessor.setUser(authentication);
     }
