@@ -17,6 +17,7 @@ import java.util.UUID;
 public class ProjectService {
 
     private final ProjectRepository projectRepository;
+    private final ProjectAccessService accessService;
 
     public ProjectDto create(UUID ownerId, CreateProjectRequest req) {
         ProjectEntity project = ProjectEntity.builder()
@@ -30,18 +31,22 @@ public class ProjectService {
         return toDto(project);
     }
 
-    public List<ProjectDto> list(UUID ownerId) {
-        return projectRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId)
+    public List<ProjectDto> list(UUID userId) {
+        return projectRepository.findAccessibleByUser(userId)
                 .stream()
                 .map(ProjectService::toDto)
                 .toList();
     }
 
-    public ProjectDto get(UUID ownerId, UUID projectId) {
-        ProjectEntity project = projectRepository.findByIdAndOwnerId(projectId, ownerId)
+    public ProjectDto get(UUID userId, UUID projectId) {
+        accessService.requireAccess(userId, projectId);
+
+        ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
         return toDto(project);
     }
+
 
     public static ProjectDto toDto(ProjectEntity p) {
         return new ProjectDto(p.getId(), p.getName(), p.getDescription(), p.getCreatedAt());

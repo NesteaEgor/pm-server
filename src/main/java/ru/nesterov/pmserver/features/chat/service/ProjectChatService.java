@@ -9,7 +9,7 @@ import ru.nesterov.pmserver.features.chat.dto.EditMessageRequest;
 import ru.nesterov.pmserver.features.chat.dto.SendMessageRequest;
 import ru.nesterov.pmserver.features.chat.entity.ProjectMessageEntity;
 import ru.nesterov.pmserver.features.chat.repository.ProjectMessageRepository;
-import ru.nesterov.pmserver.features.projects.repository.ProjectRepository;
+import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
 import ru.nesterov.pmserver.features.users.repository.UserRepository;
 
 import java.time.Instant;
@@ -21,12 +21,12 @@ import java.util.stream.Collectors;
 public class ProjectChatService {
 
     private final ProjectMessageRepository messageRepository;
-    private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final ProjectAccessService accessService;
 
-    private void requireProject(UUID ownerId, UUID projectId) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    private void requireProject(UUID userId, UUID projectId) {
+        // ✅ ВАЖНО: теперь доступ по участию/владению, а не только ownerId
+        accessService.requireAccess(userId, projectId);
     }
 
     private ProjectMessageEntity requireMessage(UUID userId, UUID projectId, UUID messageId) {
@@ -49,6 +49,7 @@ public class ProjectChatService {
 
         final String cid = req.getClientMessageId().trim();
 
+        // ✅ идемпотентность: если клиент повторно отправил тот же clientMessageId
         var existing = messageRepository.findByProjectIdAndAuthorIdAndClientMessageId(projectId, userId, cid);
         if (existing.isPresent()) {
             return toDto(existing.get(), "CREATED");
@@ -106,8 +107,10 @@ public class ProjectChatService {
             list = messageRepository.findByProjectIdAndCreatedAtLessThanOrderByCreatedAtDesc(projectId, before, pageable);
         }
 
+        // из базы DESC, для UI удобнее ASC
         Collections.reverse(list);
 
+        // подтягиваем имена пачкой
         Set<UUID> authorIds = list.stream().map(ProjectMessageEntity::getAuthorId).collect(Collectors.toSet());
         Map<UUID, String> names = userRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(u -> u.getId(), u -> u.getDisplayName()));
