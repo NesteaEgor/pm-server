@@ -4,6 +4,8 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -21,6 +23,8 @@ public class ChatMessageDto {
     private Instant editedAt;
     private Instant deletedAt;
 
-    // CREATED / UPDATED / DELETED
     private String eventType;
+
+    private Map<String, Integer> reactions;
+    private Set<String> myReactions;
 }

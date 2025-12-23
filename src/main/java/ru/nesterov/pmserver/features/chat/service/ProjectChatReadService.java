@@ -8,6 +8,7 @@ import ru.nesterov.pmserver.features.chat.entity.ProjectChatReadEntity;
 import ru.nesterov.pmserver.features.chat.repository.ProjectChatReadRepository;
 import ru.nesterov.pmserver.features.chat.repository.ProjectMessageRepository;
 import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
+import ru.nesterov.pmserver.features.users.repository.UserRepository;
 
 import java.time.Instant;
 import java.util.*;
@@ -20,9 +21,9 @@ public class ProjectChatReadService {
     private final ProjectChatReadRepository readRepository;
     private final ProjectMessageRepository messageRepository;
     private final ProjectAccessService accessService;
+    private final UserRepository userRepository;
 
     private void requireProject(UUID userId, UUID projectId) {
-        // ✅ доступ: owner ИЛИ участник
         accessService.requireAccess(userId, projectId);
     }
 
@@ -54,9 +55,14 @@ public class ProjectChatReadService {
 
         entity = readRepository.save(entity);
 
+        String userName = userRepository.findById(userId)
+                .map(u -> u.getDisplayName())
+                .orElse("Unknown");
+
         return ReadReceiptDto.builder()
                 .projectId(entity.getProjectId())
                 .userId(entity.getUserId())
+                .userName(userName)
                 .lastReadMessageId(entity.getLastReadMessageId())
                 .lastReadMessageAt(msg.getCreatedAt())
                 .lastReadAt(entity.getLastReadAt())
@@ -83,10 +89,15 @@ public class ProjectChatReadService {
                         (a, b) -> a
                 ));
 
+        Set<UUID> userIds = receipts.stream().map(ProjectChatReadEntity::getUserId).collect(Collectors.toSet());
+        Map<UUID, String> names = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(u -> u.getId(), u -> u.getDisplayName()));
+
         return receipts.stream()
                 .map(e -> ReadReceiptDto.builder()
                         .projectId(e.getProjectId())
                         .userId(e.getUserId())
+                        .userName(names.getOrDefault(e.getUserId(), "Unknown"))
                         .lastReadMessageId(e.getLastReadMessageId())
                         .lastReadMessageAt(
                                 e.getLastReadMessageId() == null ? null : createdAtById.get(e.getLastReadMessageId())

@@ -8,12 +8,10 @@ import java.util.UUID;
 
 @Data
 @Builder
-public class ReadReceiptDto {
+public class TypingEventDto {
     private UUID projectId;
     private UUID userId;
-
-    private UUID lastReadMessageId;
-    private Instant lastReadMessageAt;
     private String userName;
-    private Instant lastReadAt;
+    private boolean typing;
+    private Instant sentAt;
 }

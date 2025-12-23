@@ -8,6 +8,7 @@ import ru.nesterov.pmserver.features.chat.dto.ChatMessageDto;
 import ru.nesterov.pmserver.features.chat.dto.EditMessageRequest;
 import ru.nesterov.pmserver.features.chat.dto.SendMessageRequest;
 import ru.nesterov.pmserver.features.chat.entity.ProjectMessageEntity;
+import ru.nesterov.pmserver.features.chat.repository.ProjectMessageReactionRepository;
 import ru.nesterov.pmserver.features.chat.repository.ProjectMessageRepository;
 import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
 import ru.nesterov.pmserver.features.users.repository.UserRepository;
@@ -21,11 +22,11 @@ import java.util.stream.Collectors;
 public class ProjectChatService {
 
     private final ProjectMessageRepository messageRepository;
+    private final ProjectMessageReactionRepository reactionRepository;
     private final UserRepository userRepository;
     private final ProjectAccessService accessService;
 
     private void requireProject(UUID userId, UUID projectId) {
-        // ✅ ВАЖНО: теперь доступ по участию/владению, а не только ownerId
         accessService.requireAccess(userId, projectId);
     }
 
@@ -35,7 +36,6 @@ public class ProjectChatService {
         ProjectMessageEntity msg = messageRepository.findByIdAndProjectId(messageId, projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
 
-        // редактировать/удалять может только автор
         if (!msg.getAuthorId().equals(userId)) {
             throw new IllegalArgumentException("Access denied");
         }
@@ -49,10 +49,9 @@ public class ProjectChatService {
 
         final String cid = req.getClientMessageId().trim();
 
-        // ✅ идемпотентность: если клиент повторно отправил тот же clientMessageId
         var existing = messageRepository.findByProjectIdAndAuthorIdAndClientMessageId(projectId, userId, cid);
         if (existing.isPresent()) {
-            return toDto(existing.get(), "CREATED");
+            return toDtoWithReactions(existing.get(), "CREATED", userId);
         }
 
         ProjectMessageEntity e = ProjectMessageEntity.builder()
@@ -64,7 +63,7 @@ public class ProjectChatService {
                 .build();
 
         e = messageRepository.save(e);
-        return toDto(e, "CREATED");
+        return toDtoWithReactions(e, "CREATED", userId);
     }
 
     @Transactional
@@ -79,7 +78,7 @@ public class ProjectChatService {
         msg.setEditedAt(Instant.now());
 
         msg = messageRepository.save(msg);
-        return toDto(msg, "UPDATED");
+        return toDtoWithReactions(msg, "UPDATED", userId);
     }
 
     @Transactional
@@ -91,7 +90,7 @@ public class ProjectChatService {
         }
 
         msg = messageRepository.save(msg);
-        return toDto(msg, "DELETED");
+        return toDtoWithReactions(msg, "DELETED", userId);
     }
 
     public List<ChatMessageDto> history(UUID userId, UUID projectId, Instant before, int limit) {
@@ -107,27 +106,72 @@ public class ProjectChatService {
             list = messageRepository.findByProjectIdAndCreatedAtLessThanOrderByCreatedAtDesc(projectId, before, pageable);
         }
 
-        // из базы DESC, для UI удобнее ASC
         Collections.reverse(list);
 
-        // подтягиваем имена пачкой
         Set<UUID> authorIds = list.stream().map(ProjectMessageEntity::getAuthorId).collect(Collectors.toSet());
         Map<UUID, String> names = userRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(u -> u.getId(), u -> u.getDisplayName()));
 
+        List<UUID> messageIds = list.stream().map(ProjectMessageEntity::getId).toList();
+
+        Map<UUID, Map<String, Integer>> reactionsByMessage = loadReactionsByMessage(messageIds);
+        Map<UUID, Set<String>> myReactionsByMessage = loadMyReactionsByMessage(messageIds, userId);
+
         return list.stream()
-                .map(e -> toDto(e, names.get(e.getAuthorId()), null))
+                .map(e -> toDto(
+                        e,
+                        names.getOrDefault(e.getAuthorId(), "Unknown"),
+                        null,
+                        reactionsByMessage.getOrDefault(e.getId(), Map.of()),
+                        myReactionsByMessage.getOrDefault(e.getId(), Set.of())
+                ))
                 .toList();
     }
 
-    private ChatMessageDto toDto(ProjectMessageEntity e, String eventType) {
+    private Map<UUID, Map<String, Integer>> loadReactionsByMessage(List<UUID> messageIds) {
+        if (messageIds.isEmpty()) return Map.of();
+
+        Map<UUID, Map<String, Integer>> out = new HashMap<>();
+        for (var row : reactionRepository.countByMessageIdIn(messageIds)) {
+            out.computeIfAbsent(row.getMessageId(), k -> new HashMap<>())
+                    .put(row.getEmoji(), (int) row.getCnt());
+        }
+        return out;
+    }
+
+    private Map<UUID, Set<String>> loadMyReactionsByMessage(List<UUID> messageIds, UUID userId) {
+        if (messageIds.isEmpty()) return Map.of();
+
+        Map<UUID, Set<String>> out = new HashMap<>();
+        for (var r : reactionRepository.findAllByMessageIdInAndUserId(messageIds, userId)) {
+            out.computeIfAbsent(r.getMessageId(), k -> new HashSet<>()).add(r.getEmoji());
+        }
+        return out;
+    }
+
+    private ChatMessageDto toDtoWithReactions(ProjectMessageEntity e, String eventType, UUID currentUserId) {
         String name = userRepository.findById(e.getAuthorId())
                 .map(u -> u.getDisplayName())
                 .orElse("Unknown");
-        return toDto(e, name, eventType);
+
+        Map<String, Integer> rx = new HashMap<>();
+        for (var row : reactionRepository.countByMessageId(e.getId())) {
+            rx.put(row.getEmoji(), (int) row.getCnt());
+        }
+
+        Set<String> my = reactionRepository.findAllByMessageIdInAndUserId(List.of(e.getId()), currentUserId).stream()
+                .map(x -> x.getEmoji())
+                .collect(Collectors.toSet());
+
+        return toDto(e, name, eventType, rx, my);
     }
 
-    private ChatMessageDto toDto(ProjectMessageEntity e, String authorName, String eventType) {
+    private ChatMessageDto toDto(ProjectMessageEntity e,
+                                 String authorName,
+                                 String eventType,
+                                 Map<String, Integer> reactions,
+                                 Set<String> myReactions) {
+
         boolean deleted = e.getDeletedAt() != null;
 
         return ChatMessageDto.builder()
@@ -141,6 +185,8 @@ public class ProjectChatService {
                 .editedAt(e.getEditedAt())
                 .deletedAt(e.getDeletedAt())
                 .eventType(eventType)
+                .reactions(reactions == null ? Map.of() : reactions)
+                .myReactions(myReactions == null ? Set.of() : myReactions)
                 .build();
     }
 }
