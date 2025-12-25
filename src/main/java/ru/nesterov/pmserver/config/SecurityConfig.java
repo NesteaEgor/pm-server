@@ -40,6 +40,9 @@ public class SecurityConfig {
                         // allow ws handshake
                         .requestMatchers("/ws/**").permitAll()
 
+                        // download files by query token
+                        .requestMatchers(HttpMethod.GET, "/api/projects/*/files/**").permitAll()
+
                         .requestMatchers("/api/auth/**", "/error").permitAll()
                         .anyRequest().authenticated()
                 )

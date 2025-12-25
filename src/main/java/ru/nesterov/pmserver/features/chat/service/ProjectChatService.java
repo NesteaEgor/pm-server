@@ -4,10 +4,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.nesterov.pmserver.features.chat.dto.ChatAttachmentDto;
 import ru.nesterov.pmserver.features.chat.dto.ChatMessageDto;
 import ru.nesterov.pmserver.features.chat.dto.EditMessageRequest;
 import ru.nesterov.pmserver.features.chat.dto.SendMessageRequest;
+import ru.nesterov.pmserver.features.chat.entity.ProjectFileEntity;
+import ru.nesterov.pmserver.features.chat.entity.ProjectMessageAttachmentEntity;
 import ru.nesterov.pmserver.features.chat.entity.ProjectMessageEntity;
+import ru.nesterov.pmserver.features.chat.repository.ProjectFileRepository;
+import ru.nesterov.pmserver.features.chat.repository.ProjectMessageAttachmentRepository;
 import ru.nesterov.pmserver.features.chat.repository.ProjectMessageReactionRepository;
 import ru.nesterov.pmserver.features.chat.repository.ProjectMessageRepository;
 import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
@@ -23,6 +28,9 @@ public class ProjectChatService {
 
     private final ProjectMessageRepository messageRepository;
     private final ProjectMessageReactionRepository reactionRepository;
+    private final ProjectFileRepository fileRepository;
+    private final ProjectMessageAttachmentRepository attachmentRepository;
+
     private final UserRepository userRepository;
     private final ProjectAccessService accessService;
 
@@ -51,19 +59,31 @@ public class ProjectChatService {
 
         var existing = messageRepository.findByProjectIdAndAuthorIdAndClientMessageId(projectId, userId, cid);
         if (existing.isPresent()) {
-            return toDtoWithReactions(existing.get(), "CREATED", userId);
+            return toDtoWithReactionsAndAttachments(existing.get(), "CREATED", userId);
+        }
+
+        String text = req.getText() == null ? "" : req.getText().trim();
+        List<UUID> attachmentIds = req.getAttachmentIds() == null ? List.of() : req.getAttachmentIds();
+
+        if (text.isEmpty() && attachmentIds.isEmpty()) {
+            throw new IllegalArgumentException("Empty message");
         }
 
         ProjectMessageEntity e = ProjectMessageEntity.builder()
                 .projectId(projectId)
                 .authorId(userId)
-                .text(req.getText().trim())
+                .text(text)
                 .createdAt(Instant.now())
                 .clientMessageId(cid)
                 .build();
 
         e = messageRepository.save(e);
-        return toDtoWithReactions(e, "CREATED", userId);
+
+        if (!attachmentIds.isEmpty()) {
+            saveAttachmentsLinks(projectId, e.getId(), attachmentIds);
+        }
+
+        return toDtoWithReactionsAndAttachments(e, "CREATED", userId);
     }
 
     @Transactional
@@ -78,7 +98,7 @@ public class ProjectChatService {
         msg.setEditedAt(Instant.now());
 
         msg = messageRepository.save(msg);
-        return toDtoWithReactions(msg, "UPDATED", userId);
+        return toDtoWithReactionsAndAttachments(msg, "UPDATED", userId);
     }
 
     @Transactional
@@ -90,7 +110,7 @@ public class ProjectChatService {
         }
 
         msg = messageRepository.save(msg);
-        return toDtoWithReactions(msg, "DELETED", userId);
+        return toDtoWithReactionsAndAttachments(msg, "DELETED", userId);
     }
 
     public List<ChatMessageDto> history(UUID userId, UUID projectId, Instant before, int limit) {
@@ -117,15 +137,71 @@ public class ProjectChatService {
         Map<UUID, Map<String, Integer>> reactionsByMessage = loadReactionsByMessage(messageIds);
         Map<UUID, Set<String>> myReactionsByMessage = loadMyReactionsByMessage(messageIds, userId);
 
+        Map<UUID, List<ChatAttachmentDto>> attachmentsByMessage = loadAttachmentsByMessage(projectId, messageIds);
+
         return list.stream()
                 .map(e -> toDto(
                         e,
                         names.getOrDefault(e.getAuthorId(), "Unknown"),
                         null,
                         reactionsByMessage.getOrDefault(e.getId(), Map.of()),
-                        myReactionsByMessage.getOrDefault(e.getId(), Set.of())
+                        myReactionsByMessage.getOrDefault(e.getId(), Set.of()),
+                        attachmentsByMessage.getOrDefault(e.getId(), List.of())
                 ))
                 .toList();
+    }
+
+    private void saveAttachmentsLinks(UUID projectId, UUID messageId, List<UUID> attachmentIds) {
+        for (UUID fileId : attachmentIds) {
+            if (fileId == null) continue;
+
+            fileRepository.findByIdAndProjectId(fileId, projectId)
+                    .orElseThrow(() -> new IllegalArgumentException("File not found"));
+
+            ProjectMessageAttachmentEntity link = ProjectMessageAttachmentEntity.builder()
+                    .id(UUID.randomUUID())
+                    .messageId(messageId)
+                    .fileId(fileId)
+                    .createdAt(Instant.now())
+                    .build();
+
+            attachmentRepository.save(link);
+        }
+    }
+
+    private Map<UUID, List<ChatAttachmentDto>> loadAttachmentsByMessage(UUID projectId, List<UUID> messageIds) {
+        if (messageIds.isEmpty()) return Map.of();
+
+        List<ProjectMessageAttachmentEntity> links = attachmentRepository.findAllByMessageIdIn(messageIds);
+        if (links.isEmpty()) return Map.of();
+
+        Set<UUID> fileIds = links.stream().map(ProjectMessageAttachmentEntity::getFileId).collect(Collectors.toSet());
+
+        Map<UUID, ProjectFileEntity> filesById = fileRepository.findAllById(fileIds).stream()
+                .filter(f -> f.getProjectId().equals(projectId))
+                .collect(Collectors.toMap(ProjectFileEntity::getId, x -> x));
+
+        Map<UUID, List<ChatAttachmentDto>> out = new HashMap<>();
+
+        for (ProjectMessageAttachmentEntity link : links) {
+            ProjectFileEntity f = filesById.get(link.getFileId());
+            if (f == null) continue;
+
+            out.computeIfAbsent(link.getMessageId(), k -> new ArrayList<>())
+                    .add(toAttachmentDto(projectId, f));
+        }
+
+        return out;
+    }
+
+    private ChatAttachmentDto toAttachmentDto(UUID projectId, ProjectFileEntity f) {
+        return ChatAttachmentDto.builder()
+                .id(f.getId())
+                .fileName(f.getOriginalName())
+                .url("/api/projects/" + projectId + "/files/" + f.getId())
+                .size(f.getSize())
+                .contentType(f.getContentType())
+                .build();
     }
 
     private Map<UUID, Map<String, Integer>> loadReactionsByMessage(List<UUID> messageIds) {
@@ -149,7 +225,7 @@ public class ProjectChatService {
         return out;
     }
 
-    private ChatMessageDto toDtoWithReactions(ProjectMessageEntity e, String eventType, UUID currentUserId) {
+    private ChatMessageDto toDtoWithReactionsAndAttachments(ProjectMessageEntity e, String eventType, UUID currentUserId) {
         String name = userRepository.findById(e.getAuthorId())
                 .map(u -> u.getDisplayName())
                 .orElse("Unknown");
@@ -163,14 +239,18 @@ public class ProjectChatService {
                 .map(x -> x.getEmoji())
                 .collect(Collectors.toSet());
 
-        return toDto(e, name, eventType, rx, my);
+        List<ChatAttachmentDto> atts = loadAttachmentsByMessage(e.getProjectId(), List.of(e.getId()))
+                .getOrDefault(e.getId(), List.of());
+
+        return toDto(e, name, eventType, rx, my, atts);
     }
 
     private ChatMessageDto toDto(ProjectMessageEntity e,
                                  String authorName,
                                  String eventType,
                                  Map<String, Integer> reactions,
-                                 Set<String> myReactions) {
+                                 Set<String> myReactions,
+                                 List<ChatAttachmentDto> attachments) {
 
         boolean deleted = e.getDeletedAt() != null;
 
@@ -187,6 +267,7 @@ public class ProjectChatService {
                 .eventType(eventType)
                 .reactions(reactions == null ? Map.of() : reactions)
                 .myReactions(myReactions == null ? Set.of() : myReactions)
+                .attachments(attachments == null ? List.of() : attachments)
                 .build();
     }
 }
