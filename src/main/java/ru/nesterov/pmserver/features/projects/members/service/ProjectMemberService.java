@@ -7,6 +7,7 @@ import ru.nesterov.pmserver.features.projects.members.dto.ProjectMemberDto;
 import ru.nesterov.pmserver.features.projects.members.entity.ProjectMemberEntity;
 import ru.nesterov.pmserver.features.projects.members.repository.ProjectMemberRepository;
 import ru.nesterov.pmserver.features.projects.repository.ProjectRepository;
+import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
 import ru.nesterov.pmserver.features.users.repository.UserRepository;
 
 import java.time.Instant;
@@ -21,15 +22,11 @@ public class ProjectMemberService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final UserRepository userRepository;
-
-    private void requireOwner(UUID ownerId, UUID projectId) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
-    }
+    private final ProjectAccessService accessService;
 
     @Transactional
     public ProjectMemberDto addMemberByEmail(UUID ownerId, UUID projectId, String email) {
-        requireOwner(ownerId, projectId);
+        accessService.requireOwner(ownerId, projectId);
 
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
@@ -62,23 +59,23 @@ public class ProjectMemberService {
 
     @Transactional
     public void removeMember(UUID ownerId, UUID projectId, UUID memberUserId) {
-        requireOwner(ownerId, projectId);
+        accessService.requireOwner(ownerId, projectId);
 
         if (memberUserId.equals(ownerId)) {
             throw new IllegalArgumentException("Cannot remove owner");
+        }
+
+        // чтобы не было "тихо ничего не удалилось"
+        if (!memberRepository.existsByProjectIdAndUserId(projectId, memberUserId)) {
+            throw new IllegalArgumentException("Member not found");
         }
 
         memberRepository.deleteByProjectIdAndUserId(projectId, memberUserId);
     }
 
     public List<ProjectMemberDto> list(UUID userId, UUID projectId) {
-        // доступ: owner ИЛИ member
-        boolean isOwner = projectRepository.existsByIdAndOwnerId(projectId, userId);
-        boolean isMember = memberRepository.existsByProjectIdAndUserId(projectId, userId);
-
-        if (!isOwner && !isMember) {
-            throw new IllegalArgumentException("Project not found");
-        }
+        // доступ: владелец ИЛИ участник
+        accessService.requireAccess(userId, projectId);
 
         var project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));

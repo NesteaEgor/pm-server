@@ -38,13 +38,30 @@ public class ProjectChatService {
         accessService.requireAccess(userId, projectId);
     }
 
-    private ProjectMessageEntity requireMessage(UUID userId, UUID projectId, UUID messageId) {
+    private ProjectMessageEntity requireMessageInProject(UUID userId, UUID projectId, UUID messageId) {
         requireProject(userId, projectId);
 
-        ProjectMessageEntity msg = messageRepository.findByIdAndProjectId(messageId, projectId)
+        return messageRepository.findByIdAndProjectId(messageId, projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+    }
+
+    private ProjectMessageEntity requireMessageForEdit(UUID userId, UUID projectId, UUID messageId) {
+        ProjectMessageEntity msg = requireMessageInProject(userId, projectId, messageId);
 
         if (!msg.getAuthorId().equals(userId)) {
+            throw new IllegalArgumentException("Access denied");
+        }
+
+        return msg;
+    }
+
+    private ProjectMessageEntity requireMessageForDelete(UUID userId, UUID projectId, UUID messageId) {
+        ProjectMessageEntity msg = requireMessageInProject(userId, projectId, messageId);
+
+        boolean isAuthor = msg.getAuthorId().equals(userId);
+        boolean isOwner = accessService.isOwner(userId, projectId);
+
+        if (!isAuthor && !isOwner) {
             throw new IllegalArgumentException("Access denied");
         }
 
@@ -88,7 +105,7 @@ public class ProjectChatService {
 
     @Transactional
     public ChatMessageDto edit(UUID userId, UUID projectId, UUID messageId, EditMessageRequest req) {
-        ProjectMessageEntity msg = requireMessage(userId, projectId, messageId);
+        ProjectMessageEntity msg = requireMessageForEdit(userId, projectId, messageId);
 
         if (msg.getDeletedAt() != null) {
             throw new IllegalArgumentException("Message deleted");
@@ -103,7 +120,7 @@ public class ProjectChatService {
 
     @Transactional
     public ChatMessageDto delete(UUID userId, UUID projectId, UUID messageId) {
-        ProjectMessageEntity msg = requireMessage(userId, projectId, messageId);
+        ProjectMessageEntity msg = requireMessageForDelete(userId, projectId, messageId);
 
         if (msg.getDeletedAt() == null) {
             msg.setDeletedAt(Instant.now());

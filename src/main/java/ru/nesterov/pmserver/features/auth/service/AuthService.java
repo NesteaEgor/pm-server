@@ -53,6 +53,21 @@ public class AuthService {
     }
 
     public static UserDto toDto(UserEntity user) {
-        return new UserDto(user.getId(), user.getEmail(), user.getDisplayName(), user.getAvatarUrl());
+        String avatarUrl = null;
+
+        if (user.getAvatarStoredName() != null && !user.getAvatarStoredName().isBlank()) {
+            avatarUrl = "/api/users/" + user.getId() + "/avatar";
+        } else if (user.getAvatarUrl() != null && !user.getAvatarUrl().isBlank()) {
+            avatarUrl = user.getAvatarUrl();
+        }
+
+        return new UserDto(
+                user.getId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                avatarUrl,
+                user.getStatus()
+        );
     }
+
 }

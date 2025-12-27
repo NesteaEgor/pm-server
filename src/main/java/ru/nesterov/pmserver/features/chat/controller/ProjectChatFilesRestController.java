@@ -63,9 +63,6 @@ public class ProjectChatFilesRestController {
 
         File target = new File(dir, storedName);
 
-        System.out.println("Upload dir: " + dir.getAbsolutePath());
-        System.out.println("Upload target: " + target.getAbsolutePath());
-
         try {
             file.transferTo(target);
         } catch (Exception ex) {
@@ -128,6 +125,42 @@ public class ProjectChatFilesRestController {
         }
 
         ContentDisposition cd = ContentDisposition.attachment()
+                .filename(e.getOriginalName())
+                .build();
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, cd.toString())
+                .contentLength(e.getSize())
+                .body(new FileSystemResource(f));
+    }
+
+    @GetMapping("/{fileId}/raw")
+    public ResponseEntity<FileSystemResource> raw(@PathVariable UUID projectId,
+                                                  @PathVariable UUID fileId,
+                                                  @RequestParam(required = false) String token,
+                                                  Authentication auth) {
+
+        UUID userId = extractUserId(auth, token);
+        accessService.requireAccess(userId, projectId);
+
+        ProjectFileEntity e = fileRepository.findByIdAndProjectId(fileId, projectId)
+                .orElseThrow(() -> new IllegalArgumentException("File not found"));
+
+        File f = new File(projectDir(projectId), e.getStoredName());
+        if (!f.exists()) {
+            throw new IllegalArgumentException("File not found on disk");
+        }
+
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        if (StringUtils.hasText(e.getContentType())) {
+            try {
+                mediaType = MediaType.parseMediaType(e.getContentType());
+            } catch (Exception ignored) {
+            }
+        }
+
+        ContentDisposition cd = ContentDisposition.inline()
                 .filename(e.getOriginalName())
                 .build();
 

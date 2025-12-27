@@ -40,10 +40,14 @@ public class SecurityConfig {
                         // allow ws handshake
                         .requestMatchers("/ws/**").permitAll()
 
-                        // download files by query token
+                        .requestMatchers("/api/auth/**", "/error").permitAll()
+
+                        // файлы в чате: можно скачать по token=
                         .requestMatchers(HttpMethod.GET, "/api/projects/*/files/**").permitAll()
 
-                        .requestMatchers("/api/auth/**", "/error").permitAll()
+                        // аватарки: можно получить по token=
+                        .requestMatchers(HttpMethod.GET, "/api/users/*/avatar**").permitAll()
+
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

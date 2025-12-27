@@ -7,7 +7,7 @@ import ru.nesterov.pmserver.features.comments.dto.CommentDto;
 import ru.nesterov.pmserver.features.comments.dto.CreateCommentRequest;
 import ru.nesterov.pmserver.features.comments.entity.TaskCommentEntity;
 import ru.nesterov.pmserver.features.comments.repository.TaskCommentRepository;
-import ru.nesterov.pmserver.features.projects.repository.ProjectRepository;
+import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
 import ru.nesterov.pmserver.features.tasks.entity.TaskEntity;
 import ru.nesterov.pmserver.features.tasks.repository.TaskRepository;
 
@@ -21,11 +21,10 @@ public class TaskCommentService {
 
     private final TaskRepository taskRepository;
     private final TaskCommentRepository commentRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectAccessService accessService;
 
-    private TaskEntity requireTask(UUID ownerId, UUID projectId, UUID taskId) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    private TaskEntity requireTask(UUID userId, UUID projectId, UUID taskId) {
+        accessService.requireAccess(userId, projectId);
 
         return taskRepository.findByIdAndProjectId(taskId, projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found"));
@@ -33,6 +32,7 @@ public class TaskCommentService {
 
     public List<CommentDto> list(UUID userId, UUID projectId, UUID taskId) {
         requireTask(userId, projectId, taskId);
+
         return commentRepository.findAllByTask_IdOrderByCreatedAtAsc(taskId)
                 .stream()
                 .map(this::toDto)
@@ -56,13 +56,23 @@ public class TaskCommentService {
 
     @Transactional
     public void delete(UUID userId, UUID projectId, UUID taskId, UUID commentId) {
-        requireTask(userId, projectId, taskId);
+        TaskEntity task = requireTask(userId, projectId, taskId);
 
-        long deleted = commentRepository.deleteByIdAndTask_IdAndAuthorId(commentId, taskId, userId);
-        if (deleted == 0) {
-            // либо коммента нет, либо он не твой
-            throw new IllegalArgumentException("Comment not found or not yours");
+        TaskCommentEntity c = commentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+
+        if (!c.getTask().getId().equals(task.getId())) {
+            throw new IllegalArgumentException("Comment not found");
         }
+
+        boolean isOwner = accessService.isOwner(userId, projectId);
+        boolean isAuthor = userId.equals(c.getAuthorId());
+
+        if (!isOwner && !isAuthor) {
+            throw new IllegalArgumentException("Access denied");
+        }
+
+        commentRepository.delete(c);
     }
 
     private CommentDto toDto(TaskCommentEntity e) {

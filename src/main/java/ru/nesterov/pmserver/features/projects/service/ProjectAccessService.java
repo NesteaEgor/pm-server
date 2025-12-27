@@ -14,20 +14,29 @@ public class ProjectAccessService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
 
+    public boolean isOwner(UUID userId, UUID projectId) {
+        return projectRepository.existsByIdAndOwnerId(projectId, userId);
+    }
+
     public boolean hasAccess(UUID userId, UUID projectId) {
-        return projectRepository.existsByIdAndOwnerId(projectId, userId)
+        return isOwner(userId, projectId)
                 || projectMemberRepository.existsByProjectIdAndUserId(projectId, userId);
     }
 
+    /** Проверка: targetUser состоит в проекте (owner или member) */
+    public boolean isUserInProject(UUID targetUserId, UUID projectId) {
+        return isOwner(targetUserId, projectId)
+                || projectMemberRepository.existsByProjectIdAndUserId(projectId, targetUserId);
+    }
+
     public void requireAccess(UUID userId, UUID projectId) {
-        // "не видно", что проект существует
         if (!hasAccess(userId, projectId)) {
             throw new IllegalArgumentException("Project not found");
         }
     }
 
     public void requireOwner(UUID userId, UUID projectId) {
-        if (!projectRepository.existsByIdAndOwnerId(projectId, userId)) {
+        if (!isOwner(userId, projectId)) {
             throw new IllegalArgumentException("Project not found");
         }
     }

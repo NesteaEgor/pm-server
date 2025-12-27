@@ -8,7 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "tasks")
-@Getter @Setter
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -21,6 +22,12 @@ public class TaskEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
+    @Column(name = "creator_id", nullable = false)
+    private UUID creatorId;
+
+    @Column(name = "assignee_id")
+    private UUID assigneeId;
+
     @Column(nullable = false)
     private String title;
 
@@ -28,7 +35,7 @@ public class TaskEntity {
     private String description;
 
     @Column(nullable = false)
-    private String status; // TODO / IN_PROGRESS / DONE
+    private String status;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

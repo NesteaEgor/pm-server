@@ -3,9 +3,10 @@ package ru.nesterov.pmserver.features.tasks.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.nesterov.pmserver.features.projects.repository.ProjectRepository;
+import ru.nesterov.pmserver.features.projects.service.ProjectAccessService;
 import ru.nesterov.pmserver.features.tasks.dto.CreateTaskRequest;
 import ru.nesterov.pmserver.features.tasks.dto.TaskDto;
+import ru.nesterov.pmserver.features.tasks.dto.UpdateTaskRequest;
 import ru.nesterov.pmserver.features.tasks.entity.TaskEntity;
 import ru.nesterov.pmserver.features.tasks.repository.TaskRepository;
 
@@ -18,15 +19,20 @@ import java.util.UUID;
 public class TaskService {
 
     private final TaskRepository taskRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectAccessService accessService;
 
-    public TaskDto create(UUID ownerId, UUID projectId, CreateTaskRequest req) {
-        // важно: проверяем, что проект принадлежит текущему юзеру
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    public TaskDto create(UUID userId, UUID projectId, CreateTaskRequest req) {
+        accessService.requireAccess(userId, projectId);
+
+        UUID assigneeId = req.getAssigneeId();
+        if (assigneeId != null && !accessService.isUserInProject(assigneeId, projectId)) {
+            throw new IllegalArgumentException("Assignee not in project");
+        }
 
         TaskEntity task = TaskEntity.builder()
                 .projectId(projectId)
+                .creatorId(userId)
+                .assigneeId(assigneeId)
                 .title(req.getTitle().trim())
                 .description(req.getDescription() == null ? null : req.getDescription().trim())
                 .status("TODO")
@@ -38,9 +44,8 @@ public class TaskService {
         return toDto(task);
     }
 
-    public List<TaskDto> list(UUID ownerId, UUID projectId, String status, String sort) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    public List<TaskDto> list(UUID userId, UUID projectId, String status, String sort) {
+        accessService.requireAccess(userId, projectId);
 
         String normalizedStatus = null;
         if (status != null && !status.isBlank()) {
@@ -57,7 +62,6 @@ public class TaskService {
         if (!normalizedSort.equals("createdat") && !normalizedSort.equals("deadline")) {
             throw new IllegalArgumentException("Invalid sort");
         }
-
 
         List<TaskEntity> tasks;
 
@@ -78,31 +82,58 @@ public class TaskService {
         return tasks.stream().map(TaskService::toDto).toList();
     }
 
-
-    public static TaskDto toDto(TaskEntity t) {
-        return new TaskDto(t.getId(), t.getProjectId(), t.getTitle(), t.getDescription(), t.getStatus(), t.getCreatedAt(), t.getDeadline());
-    }
-
-    public TaskDto update(UUID ownerId, UUID projectId, UUID taskId, ru.nesterov.pmserver.features.tasks.dto.UpdateTaskRequest req) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    public TaskDto update(UUID userId, UUID projectId, UUID taskId, UpdateTaskRequest req) {
+        accessService.requireAccess(userId, projectId);
 
         TaskEntity task = taskRepository.findByIdAndProjectId(taskId, projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found"));
 
-        if (req.getTitle() != null) task.setTitle(req.getTitle().trim());
-        if (req.getDescription() != null) task.setDescription(req.getDescription().trim());
+        boolean isOwner = accessService.isOwner(userId, projectId);
+        boolean isCreator = userId.equals(task.getCreatorId());
+        boolean isAssignee = task.getAssigneeId() != null && userId.equals(task.getAssigneeId());
 
-        if (req.getStatus() != null) {
-            String s = req.getStatus().trim().toUpperCase();
-            if (!s.equals("TODO") && !s.equals("IN_PROGRESS") && !s.equals("DONE")) {
-                throw new IllegalArgumentException("Invalid status");
-            }
-            task.setStatus(s);
+        if (!isOwner && !isCreator && !isAssignee) {
+            throw new IllegalArgumentException("Access denied");
         }
 
-        if (req.getDeadline() != null) {
-            task.setDeadline(req.getDeadline());
+        // исполнитель (если он не owner и не creator) может менять ТОЛЬКО статус
+        boolean assigneeLimited = isAssignee && !isOwner && !isCreator;
+
+        if (assigneeLimited) {
+            boolean triesToChangeOther =
+                    req.getTitle() != null
+                            || req.getDescription() != null
+                            || req.getDeadline() != null
+                            || req.getAssigneeId() != null;
+
+            if (triesToChangeOther) {
+                throw new IllegalArgumentException("Access denied");
+            }
+
+            if (req.getStatus() == null) {
+                throw new IllegalArgumentException("Nothing to update");
+            }
+
+            task.setStatus(normalizeStatus(req.getStatus()));
+            task = taskRepository.save(task);
+            return toDto(task);
+        }
+
+        // owner или creator: могут менять всё
+        if (req.getTitle() != null) task.setTitle(req.getTitle().trim());
+        if (req.getDescription() != null) task.setDescription(req.getDescription().trim());
+        if (req.getDeadline() != null) task.setDeadline(req.getDeadline());
+
+        if (req.getAssigneeId() != null) {
+            UUID a = req.getAssigneeId();
+            if (!accessService.isUserInProject(a, projectId)) {
+                throw new IllegalArgumentException("Assignee not in project");
+            }
+            task.setAssigneeId(a);
+        }
+
+        if (req.getStatus() != null) {
+            task.setStatus(normalizeStatus(req.getStatus()));
         }
 
         task = taskRepository.save(task);
@@ -110,15 +141,41 @@ public class TaskService {
     }
 
     @Transactional
-    public void delete(UUID ownerId, UUID projectId, UUID taskId) {
-        projectRepository.findByIdAndOwnerId(projectId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    public void delete(UUID userId, UUID projectId, UUID taskId) {
+        accessService.requireAccess(userId, projectId);
 
-        long deleted = taskRepository.deleteByIdAndProjectId(taskId, projectId);
-        if (deleted == 0) {
-            throw new IllegalArgumentException("Task not found");
+        TaskEntity task = taskRepository.findByIdAndProjectId(taskId, projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Task not found"));
+
+        boolean isOwner = accessService.isOwner(userId, projectId);
+        boolean isCreator = userId.equals(task.getCreatorId());
+
+        if (!isOwner && !isCreator) {
+            throw new IllegalArgumentException("Access denied");
         }
+
+        taskRepository.delete(task);
     }
 
+    private String normalizeStatus(String raw) {
+        String s = raw.trim().toUpperCase();
+        if (!s.equals("TODO") && !s.equals("IN_PROGRESS") && !s.equals("DONE")) {
+            throw new IllegalArgumentException("Invalid status");
+        }
+        return s;
+    }
 
+    public static TaskDto toDto(TaskEntity t) {
+        return new TaskDto(
+                t.getId(),
+                t.getProjectId(),
+                t.getCreatorId(),
+                t.getAssigneeId(),
+                t.getTitle(),
+                t.getDescription(),
+                t.getStatus(),
+                t.getCreatedAt(),
+                t.getDeadline()
+        );
+    }
 }

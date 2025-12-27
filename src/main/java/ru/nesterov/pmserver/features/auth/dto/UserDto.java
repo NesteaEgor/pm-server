@@ -10,4 +10,5 @@ public class UserDto {
     String email;
     String displayName;
     String avatarUrl;
+    String status;
 }

@@ -4,7 +4,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -22,8 +23,11 @@ public class GlobalExceptionHandler {
         String msg = ex.getMessage() == null ? "Bad request" : ex.getMessage();
         String low = msg.toLowerCase();
 
-        HttpStatus status = HttpStatus.BAD_REQUEST; // 400 по умолчанию
-        if (low.contains("not found")) status = HttpStatus.NOT_FOUND;                 // 404
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+
+        if (low.contains("unauthorized")) status = HttpStatus.UNAUTHORIZED; // 401
+        else if (low.contains("access denied") || low.contains("forbidden")) status = HttpStatus.FORBIDDEN; // 403
+        else if (low.contains("not found")) status = HttpStatus.NOT_FOUND; // 404
         else if (low.contains("already exists") || low.contains("exists")) status = HttpStatus.CONFLICT; // 409
         else if (low.contains("invalid credentials")) status = HttpStatus.UNAUTHORIZED; // 401
 
@@ -39,7 +43,7 @@ public class GlobalExceptionHandler {
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .collect(Collectors.joining("; "));
 
-        HttpStatus status = HttpStatus.BAD_REQUEST; // 400
+        HttpStatus status = HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(status).body(buildError(status, msg, req.getRequestURI()));
     }
 
@@ -48,8 +52,7 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest req
     ) {
-        // Не светим stacktrace клиенту (в курсовом и в реальном проде так делают)
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR; // 500
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
         return ResponseEntity.status(status).body(buildError(status, "Internal server error", req.getRequestURI()));
     }
 

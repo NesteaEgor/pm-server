@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 public class CreateTaskRequest {
@@ -17,4 +18,6 @@ public class CreateTaskRequest {
     private String description;
 
     private Instant deadline;
+
+    private UUID assigneeId;
 }

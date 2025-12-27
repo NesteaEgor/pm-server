@@ -15,7 +15,6 @@ import java.util.UUID;
 public class UserEntity {
 
     @Id
-    //@GeneratedValue было но сменил тк генерируется по умолчанию (uuid_generate_v4()), но Hibernate иногда пытается вставить id=null и может ругаться.
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
@@ -28,8 +27,21 @@ public class UserEntity {
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
+    // старое поле оставляем (не ломаем), но теперь будем отдавать avatarUrl как endpoint
     @Column(name = "avatar_url")
     private String avatarUrl;
+
+    @Column(name = "status", length = 160)
+    private String status;
+
+    @Column(name = "avatar_stored_name", length = 255)
+    private String avatarStoredName;
+
+    @Column(name = "avatar_content_type", length = 128)
+    private String avatarContentType;
+
+    @Column(name = "avatar_size")
+    private Long avatarSize;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

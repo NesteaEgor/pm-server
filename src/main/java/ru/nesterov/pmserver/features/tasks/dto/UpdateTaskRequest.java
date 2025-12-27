@@ -4,11 +4,11 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 public class UpdateTaskRequest {
 
-    // Можно прислать только то, что меняем (nullable поля)
     @Size(min = 2, max = 255)
     private String title;
 
@@ -20,4 +20,5 @@ public class UpdateTaskRequest {
 
     private Instant deadline;
 
+    private UUID assigneeId;
 }

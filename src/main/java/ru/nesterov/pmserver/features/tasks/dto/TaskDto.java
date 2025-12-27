@@ -9,6 +9,8 @@ import java.util.UUID;
 public class TaskDto {
     UUID id;
     UUID projectId;
+    UUID creatorId;
+    UUID assigneeId;
     String title;
     String description;
     String status;
