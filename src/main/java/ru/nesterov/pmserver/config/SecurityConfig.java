@@ -47,6 +47,7 @@ public class SecurityConfig {
 
                         // аватарки: можно получить по token=
                         .requestMatchers(HttpMethod.GET, "/api/users/*/avatar**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
 
                         .anyRequest().authenticated()
                 )

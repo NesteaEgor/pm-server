@@ -30,12 +30,21 @@ public class ProjectChatFilesRestController {
     private final JwtService jwtService;
 
     private File baseDir() {
-        return new File(System.getProperty("user.home"), "pm_uploads");
+        File dir = new File(System.getProperty("user.home"), "pm_uploads");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("Cannot create uploads dir: " + dir.getAbsolutePath());
+        }
+        return dir;
     }
 
     private File projectDir(UUID projectId) {
-        return new File(baseDir(), "projects" + File.separator + projectId);
+        File dir = new File(baseDir(), "projects" + File.separator + projectId);
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("Cannot create project dir: " + dir.getAbsolutePath());
+        }
+        return dir;
     }
+
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ChatAttachmentDto upload(Authentication auth,

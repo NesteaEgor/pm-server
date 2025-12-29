@@ -32,12 +32,22 @@ public class UserProfileController {
     private final UserProfileService profileService;
 
     private File avatarsBaseDir() {
-        return new File(System.getProperty("user.home"), "pm_uploads" + File.separator + "avatars");
+        File dir = new File(System.getProperty("user.home"),
+                "pm_uploads" + File.separator + "avatars");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("Cannot create avatars dir: " + dir.getAbsolutePath());
+        }
+        return dir;
     }
 
     private File userAvatarDir(UUID userId) {
-        return new File(avatarsBaseDir(), userId.toString());
+        File dir = new File(avatarsBaseDir(), userId.toString());
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IllegalStateException("Cannot create user avatar dir: " + dir.getAbsolutePath());
+        }
+        return dir;
     }
+
 
     @GetMapping("/users/{userId}")
     public UserDto getUser(Authentication auth, @PathVariable UUID userId) {
