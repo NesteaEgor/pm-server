@@ -10,6 +10,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pm_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     restart: unless-stopped
 
   api:
@@ -34,4 +36,3 @@ services:
 
 volumes:
   pm_pgdata:
-  pm_uploads:

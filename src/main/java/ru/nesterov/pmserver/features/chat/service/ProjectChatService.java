@@ -284,7 +284,7 @@ public class ProjectChatService {
                 .eventType(eventType)
                 .reactions(reactions == null ? Map.of() : reactions)
                 .myReactions(myReactions == null ? Set.of() : myReactions)
-                .attachments(attachments == null ? List.of() : attachments)
+                .attachments(deleted ? List.of() : (attachments == null ? List.of() : attachments))
                 .build();
     }
 }
